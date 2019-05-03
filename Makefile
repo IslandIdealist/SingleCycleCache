@@ -1,9 +1,10 @@
 CC = gcc
 CFLAGS = -pipe
+LINKER = -lm
 PRNAME = simulator
 
 all: $(PRNAME).o tags
-	$(CC) $(CFLAGS) $(PRNAME).o -o $(PRNAME)
+	$(CC) $(CFLAGS) $(PRNAME).o -o $(PRNAME) $(LINKER)
 
 simulator.o: $(PRNAME).c
 	$(CC) $(CFLAGS) -c $(PRNAME).c

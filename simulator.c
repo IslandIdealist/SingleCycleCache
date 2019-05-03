@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <math.h>
 
 #define NUMMEMORY 65536
 #define NUMREGS 8
@@ -74,7 +75,16 @@ int main( int argc, char** argv ) {
 		fscanf(stdin, "%d", &cache-> numWays);
 	}
 
-	if (cache-> blockSize <= 0 || cache-> numSets <= 0 || cache-> numWays <= 0) {
+	int error = (cache-> blockSize <= 0) ? 1 : 0;
+	    error = (cache-> numSets <= 0) ? 1 : error;
+			error = (cache-> numWays <= 0) ? 1 : error;
+	    error = (cache-> blockSize > 256) ? 1 : error;
+			error = (cache-> numWays > cache-> blockSize) ? 1 : error;
+	    error = (log2(cache-> blockSize) != floor(log2(cache-> blockSize))) ? 1 : 0;
+	    error = (log2(cache-> numSets) != floor(log2(cache-> numSets))) ? 1 : 0;
+	    error = (log2(cache-> numWays) != floor(log2(cache-> numWays))) ? 1 : 0;
+
+	if (error) {
 		printf("Improper cache settings given\n");
 		exit(EXIT_FAILURE);
 	}
