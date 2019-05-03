@@ -101,25 +101,13 @@ int runInstrs( statetype* state ) {
 		numInstrs += (opcode == 6) ? 0 : 1;
 
 		if (opcode == 0) { // add
-			if (regDest < 1 || regDest > 7 || regA < 0 || regA > 7 || regB < 0 || regB > 7) {
-				printf( "ERROR: add was given an improper register\n" );
-				exit( EXIT_FAILURE );
-			}
-
 			state-> reg[regDest] = state-> reg[regA] + state-> reg[regB];
 		}
 		else if (opcode == 1) { // nand
-			if (regDest < 1 || regDest > 7 || regA < 0 || regA > 7 || regB < 0 || regB > 7) {
-				printf( "ERROR: nand was given an improper register\n" );
-				exit( EXIT_FAILURE );
-			}
-
 			state-> reg[regDest] = ~ (state-> reg[regA] & state-> reg[regB]);
 		}
 		else if (opcode == 2) { // lw
-			int error = (regA < 1 || regA > 7)                       ? 1 : 0;
-		      error = (regB < 0 || regB > 7)                       ? 1 : error;
-					error = (state-> reg[regB] + immediate < 0)          ? 1 : error;
+			int error = (state-> reg[regB] + immediate < 0)          ? 1 : error;
 					error = (state-> reg[regB] + immediate >= NUMMEMORY) ? 1 : error;
 
 			if (error) {
@@ -130,9 +118,7 @@ int runInstrs( statetype* state ) {
 			state-> reg[regA] = state-> mem[state-> reg[regB] + immediate];
 		}
 		else if (opcode == 3) { // sw
-			int error = (regA < 1 || regA > 7)                       ? 1 : 0;
-		      error = (regB < 0 || regB > 7)                       ? 1 : error;
-					error = (state-> reg[regB] + immediate < 0)          ? 1 : error;
+			int error = (state-> reg[regB] + immediate < 0)          ? 1 : error;
 					error = (state-> reg[regB] + immediate >= NUMMEMORY) ? 1 : error;
 
 			if (error) {
@@ -143,10 +129,7 @@ int runInstrs( statetype* state ) {
 			state-> mem[state-> reg[regB] + immediate] = state-> reg[regA];
 		}
 		else if (opcode == 4) { // beq
-			int error = (regA < 0 || regA > 7) ? 1 : 0;
-		      error = (regB < 0 || regB > 7) ? 1 : error;
-
-			if (error || (state-> reg[regA] == state-> reg[regB] && (state-> pc + immediate < 0 || state-> pc + immediate >= NUMMEMORY))) {
+			if (state-> reg[regA] == state-> reg[regB] && (state-> pc + immediate < 0 || state-> pc + immediate >= NUMMEMORY)) {
 				printf( "ERROR: beq was given an improper reg or offset\n" );
 				exit( EXIT_FAILURE );
 			}
@@ -154,11 +137,6 @@ int runInstrs( statetype* state ) {
 			state-> pc += (state-> reg[regA] == state-> reg[regB]) ? immediate : 0;
 		}
 		else if (opcode == 5) { // jalr
-			if (regA < 1 || regA > 7 || regB < 0 || regB > 7) {
-				printf( "ERROR: jalr was given an improper register\n" );
-				exit( EXIT_FAILURE );
-			}
-
 			state-> reg[regA] = state-> pc;
 			state-> pc = state-> reg[regB];
 		}
