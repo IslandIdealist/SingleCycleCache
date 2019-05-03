@@ -13,23 +13,70 @@ typedef struct stateStruct {
 	int numMemory;
 } statetype;
 
+typedef struct cacheStruct {
+	int blockSize; // in words
+	int numSets;
+	int numWays; // associativity
+} cachetype;
+
 void printState( statetype* state );
 int  runInstrs( statetype* state );
 
 int main( int argc, char** argv ) {
 // GETOPT
-	int   opt;
-	char* userFile;
+	int        opt;
+	char*      userFile = NULL;
+	cachetype* cache = calloc(1, sizeof(cachetype));
 
-	while ((opt = getopt( argc, argv, "i:" )) != -1) {
+	while ((opt = getopt( argc, argv, "f: b: s: a:" )) != -1) {
 		switch (opt) {
-			case 'i':
+			case 'f':
 				userFile = strdup( optarg ); // <frd>
+				break;
+			case 'b':
+				cache-> blockSize = atoi( optarg );
+				break;
+			case 's':
+				cache-> numSets = atoi( optarg );
+				break;
+			case 'a':
+				cache-> numWays = atoi( optarg );
 				break;
 			default:
 				printf( "ERROR: Invalid command arguments\n" );
 				exit( EXIT_FAILURE );
 		}
+	}
+
+
+// GET CACHE INFO NOT PROVIDED
+	if (userFile == NULL) {
+		char* tempStr = malloc(256 * sizeof(char)); // <frd>
+
+		printf("Enter the machine code program to simulate: ");
+		fscanf(stdin, "%s", tempStr);
+		userFile = strdup( tempStr ); // <frd>
+		free( tempStr );
+	}
+
+	if (cache-> blockSize <= 0) {
+		printf("Enter the block size of the cache (in words): ");
+		fscanf(stdin, "%d", &cache-> blockSize);
+	}
+
+	if (cache-> numSets <= 0) {
+		printf("Enter the number of sets in the cache: ");
+		fscanf(stdin, "%d", &cache-> numSets);
+	}
+
+	if (cache-> numWays <= 0) {
+		printf("Enter the associativity of the cache: ");
+		fscanf(stdin, "%d", &cache-> numWays);
+	}
+
+	if (cache-> blockSize <= 0 || cache-> numSets <= 0 || cache-> numWays <= 0) {
+		printf("Improper cache settings given\n");
+		exit(EXIT_FAILURE);
 	}
 
 
