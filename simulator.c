@@ -15,13 +15,19 @@ typedef struct stateStruct {
 } statetype;
 
 typedef struct cacheStruct {
-	int blockSize; // in words
-	int numSets;
-	int numWays; // associativity
+	int   blkSize; // words per block
+	int   numSets;
+	int   numWays; // associativity
+	int   numBlks; // (words/block) * ways * sets
+	int** data;
+	int** tag;
+	int** isValid;
+	int** isDirty;
 } cachetype;
 
 void printState( statetype* state );
-int  runInstrs( statetype* state );
+int  runInstrs( statetype* state, cachetype* cache );
+int  getCache( statetype* state, cachetype* cache, int addr );
 
 int main( int argc, char** argv ) {
 // GETOPT
@@ -35,7 +41,7 @@ int main( int argc, char** argv ) {
 				userFile = strdup( optarg ); // <frd>
 				break;
 			case 'b':
-				cache-> blockSize = atoi( optarg );
+				cache-> blkSize = atoi( optarg );
 				break;
 			case 's':
 				cache-> numSets = atoi( optarg );
@@ -49,7 +55,6 @@ int main( int argc, char** argv ) {
 		}
 	}
 
-
 // GET CACHE INFO NOT PROVIDED
 	if (userFile == NULL) {
 		char* tempStr = malloc(256 * sizeof(char)); // <frd>
@@ -60,9 +65,9 @@ int main( int argc, char** argv ) {
 		free( tempStr );
 	}
 
-	if (cache-> blockSize <= 0) {
+	if (cache-> blkSize <= 0) {
 		printf("Enter the block size of the cache (in words): ");
-		fscanf(stdin, "%d", &cache-> blockSize);
+		fscanf(stdin, "%d", &cache-> blkSize);
 	}
 
 	if (cache-> numSets <= 0) {
@@ -75,12 +80,15 @@ int main( int argc, char** argv ) {
 		fscanf(stdin, "%d", &cache-> numWays);
 	}
 
-	int error = (cache-> blockSize <= 0) ? 1 : 0;
+	cache-> numBlks = cache-> numWays * cache-> numSets;
+
+// CHECK CACHE FOR ERRORS
+	int error = (cache-> blkSize <= 0) ? 1 : 0;
 	    error = (cache-> numSets <= 0) ? 1 : error;
 			error = (cache-> numWays <= 0) ? 1 : error;
-	    error = (cache-> blockSize > 256) ? 1 : error;
-			error = (cache-> numWays > cache-> blockSize) ? 1 : error;
-	    error = (log2(cache-> blockSize) != floor(log2(cache-> blockSize))) ? 1 : 0;
+	    error = (cache-> blkSize > 256) ? 1 : error;
+			error = (cache-> numWays > cache-> numBlks) ? 1 : error;
+	    error = (log2(cache-> blkSize) != floor(log2(cache-> blkSize))) ? 1 : 0;
 	    error = (log2(cache-> numSets) != floor(log2(cache-> numSets))) ? 1 : 0;
 	    error = (log2(cache-> numWays) != floor(log2(cache-> numWays))) ? 1 : 0;
 
@@ -89,6 +97,19 @@ int main( int argc, char** argv ) {
 		exit(EXIT_FAILURE);
 	}
 
+// INITIALIZE CACHE DATA ARRAY
+	for (int i = 0; i < cache-> numSets; ++i) {
+		cache-> data[i] = malloc( cache-> numWays * sizeof(int) ); // <frd>
+	}
+	for (int i = 0; i < cache-> numSets; ++i) {
+		cache-> tag[i] = malloc( cache-> numWays * sizeof(int) ); // <frd>
+	}
+	for (int i = 0; i < cache-> numSets; ++i) {
+		cache-> isValid[i] = calloc( cache-> numWays, sizeof(int) ); // <frd>
+	}
+	for (int i = 0; i < cache-> numSets; ++i) {
+		cache-> isDirty[i] = calloc( cache-> numWays, sizeof(int) ); // <frd>
+	}
 
 // OPEN FILE AND SAVE INTO MEMORY
 	FILE*      openFile = fopen( userFile, "r" );
@@ -109,10 +130,24 @@ int main( int argc, char** argv ) {
 	free( curStr );
 	fclose( openFile );
 
-
 // PERFORM INSTRUCTIONS AND PRINT STATE
-	int numInstrs = runInstrs( state );
+	int numInstrs = runInstrs( state, cache );
 
+// FREE CACHE ARRAYS
+	for (int i = 0; i < cache-> numSets; ++i) {
+		free( cache-> data[i] );
+	}
+	for (int i = 0; i < cache-> numSets; ++i) {
+		free( cache-> tag[i] );
+	}
+	for (int i = 0; i < cache-> numSets; ++i) {
+		free( cache-> isValid[i] );
+	}
+	for (int i = 0; i < cache-> numSets; ++i) {
+		free( cache-> isDirty[i] );
+	}
+
+// PRINT FINAL STATE
 	printState( state );
 	free( state );
 	printf( "\nINSTRUCTIONS: %d\n", numInstrs );
@@ -135,17 +170,17 @@ void printState( statetype* state ) {
 	printf( "end state\n" );
 }
 
-int runInstrs( statetype* state ) {
+int runInstrs( statetype* state, cachetype* cache ) {
 	int curInstr;
 	int immediate;
 	int regDest;
 	int regB;
 	int regA;
-	int opcode = (state-> mem[state-> pc] >> 22) & 7;
+	int opcode = (getCache( state, cache, state-> pc ) >> 22) & 7;
 	int numInstrs = 1;
 
 	while (opcode != 6) { // continue while instructions isn't halt
-		curInstr   = state-> mem[state-> pc];
+		curInstr   = getCache( state, cache, state-> pc );
 		immediate  = curInstr & 0xffff; // 65535
 		immediate -= (immediate & (1 << 15)) ? (1 << 16) : 0;
 		regDest    = curInstr & 7;
@@ -172,7 +207,7 @@ int runInstrs( statetype* state ) {
 				exit( EXIT_FAILURE );
 			}
 
-			state-> reg[regA] = state-> mem[state-> reg[regB] + immediate];
+			state-> reg[regA] = getCache( state, cache, state-> reg[regB] + immediate );
 		}
 		else if (opcode == 3) { // sw
 			int error = (state-> reg[regB] + immediate < 0)          ? 1 : error;
@@ -183,6 +218,7 @@ int runInstrs( statetype* state ) {
 				exit( EXIT_FAILURE );
 			}
 
+			//putCache( state, cache, state-> reg[regB] + immediate ) = state-> reg[regA];
 			state-> mem[state-> reg[regB] + immediate] = state-> reg[regA];
 		}
 		else if (opcode == 4) { // beq
@@ -207,4 +243,36 @@ int runInstrs( statetype* state ) {
 	}
 
 	return numInstrs;
+}
+
+int getCache( statetype* state, cachetype* cache, int addr ) {
+	int blk = addr & (cache-> blkSize - 1);
+	int set = (addr >> (int)log2( cache-> blkSize )) & (cache-> numSets - 1);
+	int tag = addr >> (int)(log2( cache-> blkSize ) + log2( cache-> numSets ));
+
+	if (cache-> isValid[set][blk] && cache-> tag[set][blk] == tag) {
+		return cache-> data[set][blk];
+	}
+	else {
+		cache-> data[set][blk] = state-> mem[addr];
+		cache-> isValid[set][blk] = 1;
+		cache-> tag[set][blk] = tag;
+	}
+}
+
+int putCache( statetype* state, cachetype* cache, int addr, int data ) {
+	int blk = addr & (cache-> blkSize - 1);
+	int set = (addr >> (int)log2( cache-> blkSize )) & (cache-> numSets - 1);
+	int tag = addr >> (int)(log2( cache-> blkSize ) + log2( cache-> numSets ));
+
+	if (cache-> isValid[set][blk] && cache-> tag[set][blk] == tag) {
+		cache-> data[set][blk] = data;
+		cache-> isDirty[set][blk] = 1;
+	}
+	else {
+		cache-> data[set][blk] = data;
+		cache-> isValid[set][blk] = 1;
+		cache-> tag[set][blk] = tag;
+		cache-> isDirty[set][blk] = 1;
+	}
 }
