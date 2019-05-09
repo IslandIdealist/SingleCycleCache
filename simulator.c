@@ -14,15 +14,20 @@ typedef struct stateStruct {
 	int numMemory;
 } statetype;
 
+typedef struct entryStruct {
+	int* data;
+	int  tag;
+	int  isValid;
+	int  isDirty;
+	int  lru;
+} entrytype;
+
 typedef struct cacheStruct {
-	int   blkSize; // words per block
-	int   numSets;
-	int   numWays; // associativity
-	int   numBlks; // (words/block) * ways * sets
-	int** data;
-	int** tag;
-	int** isValid;
-	int** isDirty;
+	int         blkSize; // words per block
+	int         numSets;
+	int         numWays; // associativity
+	int         numBlks; // (words/block) * ways * sets
+	entrytype** entries;
 } cachetype;
 
 void printState( statetype* state );
@@ -99,17 +104,15 @@ int main( int argc, char** argv ) {
 
 // INITIALIZE CACHE DATA ARRAY
 	for (int i = 0; i < cache-> numSets; ++i) {
-		cache-> data[i] = malloc( cache-> numWays * sizeof(int) ); // <frd>
+		cache-> entries[i] = malloc( cache-> numWays * sizeof(entrytype) ); // <frd>
+		for (int j = 0; j < cache-> numWays; ++j) {
+			cache-> entries[i][j] = malloc( cache-> blkSize * sizeof(int) );  // <frd>
+			cache-> entries[i][j]-> isValid = 0;
+			cache-> entries[i][j]-> isDirty = 0;
+			cache-> entries[i][j]-> lru = 0;
+		}
 	}
-	for (int i = 0; i < cache-> numSets; ++i) {
-		cache-> tag[i] = malloc( cache-> numWays * sizeof(int) ); // <frd>
-	}
-	for (int i = 0; i < cache-> numSets; ++i) {
-		cache-> isValid[i] = calloc( cache-> numWays, sizeof(int) ); // <frd>
-	}
-	for (int i = 0; i < cache-> numSets; ++i) {
-		cache-> isDirty[i] = calloc( cache-> numWays, sizeof(int) ); // <frd>
-	}
+
 
 // OPEN FILE AND SAVE INTO MEMORY
 	FILE*      openFile = fopen( userFile, "r" );
@@ -135,16 +138,10 @@ int main( int argc, char** argv ) {
 
 // FREE CACHE ARRAYS
 	for (int i = 0; i < cache-> numSets; ++i) {
-		free( cache-> data[i] );
-	}
-	for (int i = 0; i < cache-> numSets; ++i) {
-		free( cache-> tag[i] );
-	}
-	for (int i = 0; i < cache-> numSets; ++i) {
-		free( cache-> isValid[i] );
-	}
-	for (int i = 0; i < cache-> numSets; ++i) {
-		free( cache-> isDirty[i] );
+		free( cache-> entries[i] );
+		for (int j = 0; j < cache-> numWays; ++j) {
+			free( cache-> entries[i][j] );
+		}
 	}
 
 // PRINT FINAL STATE
@@ -246,15 +243,33 @@ int runInstrs( statetype* state, cachetype* cache ) {
 }
 
 int getCache( statetype* state, cachetype* cache, int addr ) {
+	// parse addr format [ tag | set | blk ]
 	int blk = addr & (cache-> blkSize - 1);
 	int set = (addr >> (int)log2( cache-> blkSize )) & (cache-> numSets - 1);
 	int tag = addr >> (int)(log2( cache-> blkSize ) + log2( cache-> numSets ));
+	int lruMax = 0;
+	int lruIndex = 0;
 
-	if (cache-> isValid[set][blk] && cache-> tag[set][blk] == tag) {
-		return cache-> data[set][blk];
+	for (int i = 0; i < cache-> numWays; ++i) {
+		if (cache-> entries[set][i]-> isValid && cache-> entries[set][i]-> tag == tag) {
+			cache-> entries[set][i]-> lru = 0;
+			return cache-> entries[set][i]-> data[blk];
+		}
+
+		cache-> entries[set][i]-> lru += 1;
+		if (lruMax < cache-> entries[set][i]-> lru) {
+			lruMax = cache-> entries[set][i]-> lru;
+			lruIndex = i;
+		}
+	}
+
+	if (cache-> numWays == 1) {
+		cache-> entries[set][0]-> data[blk] = state-> mem[addr];
+		cache-> entries[set][0]-> isValid = 1;
+		cache-> entries[set][0]-> tag = tag;
 	}
 	else {
-		cache-> data[set][blk] = state-> mem[addr];
+		cache-> entries[set][getLRU()]  data[set][blk] = state-> mem[addr];
 		cache-> isValid[set][blk] = 1;
 		cache-> tag[set][blk] = tag;
 	}
