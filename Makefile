@@ -24,5 +24,5 @@ entr:
 leave:
 	pkill entr
 
-clean:
+clean: leave
 	rm $(PRNAME) *.o *.*~ *~ .tags .cscope*
