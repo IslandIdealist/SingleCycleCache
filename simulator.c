@@ -110,10 +110,13 @@ int main( int argc, char** argv ) {
 	}
 
 // INITIALIZE CACHE DATA ARRAY
+	cache-> entries = malloc( cache-> numSets * sizeof(entrytype**) );
+
 	for (int i = 0; i < cache-> numSets; ++i) {
-		//cache-> entries[i] = malloc( cache-> numWays * sizeof(entrytype) ); // <frd>
-		cache-> entries[i] = malloc( cache-> numWays ); // <frd>
+		cache-> entries[i] = malloc( cache-> numWays * sizeof(entrytype*) ); // <frd>
+
 		for (int j = 0; j < cache-> numWays; ++j) {
+			cache-> entries[i][j] = malloc( sizeof(entrytype) );
 			cache-> entries[i][j]-> data = malloc( cache-> blkSize * sizeof(int) );  // <frd>
 			cache-> entries[i][j]-> isValid = 0;
 			cache-> entries[i][j]-> isDirty = 0;
