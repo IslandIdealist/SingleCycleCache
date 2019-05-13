@@ -26,3 +26,4 @@
 ### Challenges
 + Working wiht 2d arrays
 + Proper eviction with block alignment
++ SW dirty-bit handling

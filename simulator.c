@@ -32,8 +32,7 @@ typedef struct cacheStruct {
 
 enum action_type {cache_to_processor, processor_to_cache, memory_to_cache, cache_to_memory, cache_to_nowhere};
 
-void printState( statetype* state );
-int  runInstrs( statetype* state, cachetype* cache );
+void runInstrs( statetype* state, cachetype* cache );
 int  getCache( statetype* state, cachetype* cache, int addr );
 int  evictBlock( statetype* state, cachetype* cache, int addr, int lruIndex );
 void putCache( statetype* state, cachetype* cache, int addr, int newData );
@@ -145,7 +144,7 @@ int main( int argc, char** argv ) {
 	fclose( openFile );
 
 // PERFORM INSTRUCTIONS AND PRINT STATE
-	int numInstrs = runInstrs( state, cache );
+	runInstrs( state, cache );
 
 // FREE CACHE ARRAYS
 	for (int i = 0; i < cache-> numSets; ++i) {
@@ -159,38 +158,21 @@ int main( int argc, char** argv ) {
 	free( cache );
 
 // PRINT FINAL STATE
-	printState( state );
 	free( state );
-	printf( "\nINSTRUCTIONS: %d\n", numInstrs );
 	exit( EXIT_SUCCESS );
 }
 
 
-void printState( statetype* state ) {
-	printf( "\n@@@\nstate:\n" );
-	printf( "\tpc %d\n", state -> pc );
-	printf( "\tmemory:\n" );
-
-	for (int i = 0; i < state -> numMemory; i++) {
-		printf( "\t\tmem[%d]=%d\n", i, state -> mem[i] );
-	}
-	printf( "\tregisters:\n" );
-	for (int i = 0; i < NUMREGS; i++) {
-		printf( "\t\treg[%d]=%d\n", i, state -> reg[i] );
-	}
-	printf( "end state\n" );
-}
-
-int runInstrs( statetype* state, cachetype* cache ) {
+void runInstrs( statetype* state, cachetype* cache ) {
+	int keepRunning = 1;
 	int curInstr;
 	int immediate;
 	int regDest;
 	int regB;
 	int regA;
-	int opcode = (getCache( state, cache, state-> pc ) >> 22) & 7;
-	int numInstrs = 1;
+	int opcode;
 
-	while (opcode != 6) { // continue while instructions isn't halt
+	while (keepRunning) {
 		curInstr   = getCache( state, cache, state-> pc );
 		immediate  = curInstr & 0xffff; // 65535
 		immediate -= (immediate & (1 << 15)) ? (1 << 16) : 0;
@@ -199,9 +181,7 @@ int runInstrs( statetype* state, cachetype* cache ) {
 		regA       = (curInstr >> 19) & 7;
 		opcode     = (curInstr >> 22) & 7;
 
-		printState( state );
 		state-> pc++;
-		numInstrs += (opcode == 6) ? 0 : 1;
 
 		if (opcode == 0) { // add
 			state-> reg[regDest] = state-> reg[regA] + state-> reg[regB];
@@ -210,42 +190,20 @@ int runInstrs( statetype* state, cachetype* cache ) {
 			state-> reg[regDest] = ~ (state-> reg[regA] & state-> reg[regB]);
 		}
 		else if (opcode == 2) { // lw
-			int error = (state-> reg[regB] + immediate < 0)          ? 1 : error;
-					error = (state-> reg[regB] + immediate >= NUMMEMORY) ? 1 : error;
-
-			if (error) {
-				printf( "ERROR: lw was given an improper reg or offset\n" );
-				exit( EXIT_FAILURE );
-			}
-
 			state-> reg[regA] = getCache( state, cache, state-> reg[regB] + immediate );
 		}
 		else if (opcode == 3) { // sw
-			int error = (state-> reg[regB] + immediate < 0)          ? 1 : error;
-					error = (state-> reg[regB] + immediate >= NUMMEMORY) ? 1 : error;
-
-			if (error) {
-				printf( "ERROR: sw was given an improper reg or offset\n" );
-				exit( EXIT_FAILURE );
-			}
-
-			//putCache( state, cache, state-> reg[regB] + immediate ) = state-> reg[regA];
-			state-> mem[state-> reg[regB] + immediate] = state-> reg[regA];
+			putCache( state, cache, state-> reg[regB] + immediate, state-> reg[regA] );
 		}
 		else if (opcode == 4) { // beq
-			if (state-> reg[regA] == state-> reg[regB] && (state-> pc + immediate < 0 || state-> pc + immediate >= NUMMEMORY)) {
-				printf( "ERROR: beq was given an improper reg or offset\n" );
-				exit( EXIT_FAILURE );
-			}
-
 			state-> pc += (state-> reg[regA] == state-> reg[regB]) ? immediate : 0;
 		}
 		else if (opcode == 5) { // jalr
 			state-> reg[regA] = state-> pc;
 			state-> pc = state-> reg[regB];
 		}
-		else if (opcode == 7) { // noop
-			// nothing
+		else if (opcode == 6) { // halt
+			keepRunning = 0;
 		}
 		else if (opcode > 7) {
 			printf( "ERROR: improper opcode was given\n" );
@@ -254,7 +212,6 @@ int runInstrs( statetype* state, cachetype* cache ) {
 	}
 
 	writeBack( state, cache );
-	return numInstrs;
 }
 
 int getCache( statetype* state, cachetype* cache, int addr ) {
@@ -285,8 +242,7 @@ int getCache( statetype* state, cachetype* cache, int addr ) {
 
 	result = (!cacheHit) ? evictBlock( state, cache, addr, lruIndex ) : result;
 
-	int bgnAddr = (int)(floor( addr / cache-> blkSize ) * cache-> blkSize);
-	print_action( bgnAddr, cache-> blkSize, cache_to_processor );
+	print_action( addr, 1, cache_to_processor );
 
 	return result;
 }
@@ -302,8 +258,6 @@ void putCache( statetype* state, cachetype* cache, int addr, int newData ) {
 	for (int i = 0; i < cache-> numWays; ++i) {
 		if (cache-> entries[set][i]-> isValid && cache-> entries[set][i]-> tag == tag) {
 			cache-> entries[set][i]-> lru = 0;
-			cache-> entries[set][i]-> isDirty = 1;
-			cache-> entries[set][i]-> data[blk] = newData;
 			cacheHit = 1;
 		}
 		else {
@@ -320,33 +274,37 @@ void putCache( statetype* state, cachetype* cache, int addr, int newData ) {
 		evictBlock( state, cache, addr, lruIndex );
 	}
 
-	int bgnAddr = (int)(floor( addr / cache-> blkSize ) * cache-> blkSize);
-	print_action( bgnAddr, cache-> blkSize, processor_to_cache );
+	cache-> entries[set][lruIndex]-> data[blk] = newData;
+	cache-> entries[set][lruIndex]-> isDirty = 1;
+
+	print_action( addr, 1, processor_to_cache );
 }
 
 int evictBlock( statetype* state, cachetype* cache, int addr, int lruIndex ) {
 	int blk = addr & (cache-> blkSize - 1);
 	int set = (addr >> (int)log2( cache-> blkSize )) & (cache-> numSets - 1);
 	int tag = addr >> (int)(log2( cache-> blkSize ) + log2( cache-> numSets ));
-	// combine into one variable?
-	int bgnAddr = (int)(floor( addr / cache-> blkSize ) * cache-> blkSize);
+	int bgnAddr = addr & ~(cache-> blkSize - 1);
 
-	if (cache-> entries[set][lruIndex]-> isDirty) {
-		int stAddr = cache-> entries[set][lruIndex]-> tag;
-		    stAddr = stAddr << (int)log2( cache-> numSets );
-		    stAddr = stAddr |	set;
-		    stAddr = stAddr << (int)log2( cache-> blkSize );
-		    //stAddr = stAddr |	blk;
-		    //stAddr = (int)(floor( stAddr / cache-> blkSize ) * cache-> blkSize);
+	// if there is a valid entry
+	if (cache-> entries[set][lruIndex]-> isValid) {
+		int rmAddr = cache-> entries[set][lruIndex]-> tag;
+		rmAddr <<= (int)(log2( cache-> numSets ));
+		rmAddr |= set;
+		rmAddr <<= (int)(log2( cache-> blkSize ));
 
-		for (int i = 0; i < cache-> blkSize; ++i) {
-			state-> mem[stAddr + i] = cache-> entries[set][lruIndex]-> data[i];
+		// if the entry is dirty, save to mem
+		if (cache-> entries[set][lruIndex]-> isDirty) {
+			// write to mem
+			for (int i = 0; i < cache-> blkSize; ++i) {
+				state-> mem[bgnAddr + i] = cache-> entries[set][lruIndex]-> data[i];
+			}
+
+			print_action( rmAddr, cache-> blkSize, cache_to_memory );
 		}
-
-		print_action( bgnAddr, cache-> blkSize, cache_to_memory );
-	}
-	else {
-		print_action( bgnAddr, cache-> blkSize, cache_to_nowhere );
+		else {
+			print_action( rmAddr, cache-> blkSize, cache_to_nowhere );
+		}
 	}
 
 	cache-> entries[set][lruIndex]-> isValid = 1;
@@ -362,18 +320,15 @@ int evictBlock( statetype* state, cachetype* cache, int addr, int lruIndex ) {
 	return cache-> entries[set][lruIndex]-> data[blk];
 }
 
-//do we print for transfers on writeback???
 void writeBack( statetype* state, cachetype* cache ) {
 	for (int i = 0; i < cache-> numSets; ++i) {
 		for (int j = 0; j < cache-> numWays; ++j) {
 			if (cache-> entries[i][j]-> isValid) {
 				if (cache-> entries[i][j]-> isDirty) {
 					int stAddr = cache-> entries[i][j]-> tag;
-							stAddr = stAddr << (int)log2( cache-> numSets );
-							stAddr = stAddr |	i;
-							stAddr = stAddr << (int)log2( cache-> blkSize );
-							//stAddr = stAddr |	blk;
-							//stAddr = (int)(floor( stAddr / cache-> blkSize ) * cache-> blkSize);
+							stAddr << (int)log2( cache-> numSets );
+							stAddr |= i;
+							stAddr <<= (int)log2( cache-> blkSize );
 
 					for (int k = 0; k < cache-> blkSize; ++k) {
 						state-> mem[stAddr + k] = cache-> entries[i][j]-> data[k];
@@ -394,7 +349,7 @@ void writeBack( statetype* state, cachetype* cache ) {
 	*
 	* cache_to_processor: reading data from the cache to the processor
 	* processor_to_cache: writing data from the processor to the cache
-	* memory_to_cache: reading data from the memory to the cache
+	* X memory_to_cache: reading data from the memory to the cache
 	* cache_to_memory: evicting cache data by writing it to the memory
 	* cache_to_nowhere: evicting cache data by throwing it away
 */
