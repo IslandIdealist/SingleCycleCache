@@ -44,6 +44,9 @@ int main( int argc, char** argv ) {
 // GETOPT
 	int        opt;
 	char*      userFile = NULL;
+	double     tempSize = 0;
+	double     tempSets = 0; // used for error checking
+	double     tempWays = 0;
 	cachetype* cache = calloc(1, sizeof(cachetype)); // <frd>
 
 	while ((opt = getopt( argc, argv, "f: b: s: a:" )) != -1) {
@@ -52,13 +55,13 @@ int main( int argc, char** argv ) {
 				userFile = strdup( optarg ); // <frd>
 				break;
 			case 'b':
-				cache-> blkSize = atoi( optarg );
+				tempSize = atoi( optarg );
 				break;
 			case 's':
-				cache-> numSets = atoi( optarg );
+				tempSets = atoi( optarg );
 				break;
 			case 'a':
-				cache-> numWays = atoi( optarg );
+				tempWays = atoi( optarg );
 				break;
 			default:
 				printf( "ERROR: Invalid command arguments\n" );
@@ -76,37 +79,50 @@ int main( int argc, char** argv ) {
 		free( tempStr );
 	}
 
-	if (cache-> blkSize <= 0) {
+	if (tempSize <= 0) {
 		printf("Enter the block size of the cache (in words): ");
-		fscanf(stdin, "%d", &cache-> blkSize);
+		fscanf(stdin, "%l", tempSize);
 	}
 
-	if (cache-> numSets <= 0) {
+	if (tempSets <= 0) {
 		printf("Enter the number of sets in the cache: ");
-		fscanf(stdin, "%d", &cache-> numSets);
+		fscanf(stdin, "%l", tempSets);
 	}
 
-	if (cache-> numWays <= 0) {
+	if (tempWays <= 0) {
 		printf("Enter the associativity of the cache: ");
-		fscanf(stdin, "%d", &cache-> numWays);
+		fscanf(stdin, "%l", tempWays);
 	}
 
-	cache-> numBlks = cache-> numWays * cache-> numSets;
+	cache-> numBlks = tempWays * tempSets;
 
 // CHECK CACHE FOR ERRORS
 	int error = (cache-> blkSize <= 0) ? 1 : 0;
-	    error = (cache-> numSets <= 0) ? 1 : error;
-			error = (cache-> numWays <= 0) ? 1 : error;
-	    error = (cache-> blkSize > 256) ? 1 : error;
-			error = (cache-> numWays > cache-> numBlks) ? 1 : error;
-	    error = (log2(cache-> blkSize) != floor(log2(cache-> blkSize))) ? 1 : 0;
-	    error = (log2(cache-> numSets) != floor(log2(cache-> numSets))) ? 1 : 0;
-	    error = (log2(cache-> numWays) != floor(log2(cache-> numWays))) ? 1 : 0;
+	    error = (tempSets <= 0) ? 1 : error;
+			error = (tempWays <= 0) ? 1 : error;
+	    error = (tempSize > 256) ? 1 : error;
+			error = (tempWays > tempSize) ? 1 : error;
+	    error = (log2(tempSize) != floor(log2(tempSize))) ? 1 : 0;
+	    error = (log2(tempSets) != floor(log2(tempSets))) ? 1 : 0;
+	    error = (log2(tempWays) != floor(log2(tempWays))) ? 1 : 0;
 
 	if (error) {
 		printf("Improper cache settings given\n");
 		exit(EXIT_FAILURE);
 	}
+
+	printf("nSets: %i\n", tempSets);
+	printf("log  : %i\n", log2(tempSets));
+	printf("nlog : %i\n", log(tempSets)/log(2));
+	printf("floor: %i\n", floor(log2(tempSets)));
+	printf("full : %i\n", log2(tempSets) != floor(log2(tempSets)));
+	printf("error: %i\n", error);
+	printf("log 4: %i\n", log2(4));
+	exit(EXIT_FAILURE);
+
+	cache-> blkSize = tempSize;
+	cache-> numSets = tempSets;
+	cache-> numWays = tempWays;
 
 // INITIALIZE CACHE DATA ARRAY
 	cache-> entries = malloc( cache-> numSets * sizeof(entrytype**) ); // <frd>
@@ -181,6 +197,13 @@ void runInstrs( statetype* state, cachetype* cache ) {
 		regA       = (curInstr >> 19) & 7;
 		opcode     = (curInstr >> 22) & 7;
 
+//		printf("Opcode: %i\n", opcode); // for testing
+//		for (int i = 0; i < 8; ++i) {
+//			printf("[r%i]: %i\n", i, state-> reg[i]);
+//		}
+//		for (int i = 0; i < 15; ++i) {
+//			printf("[m%i]: %i\n", i, state-> mem[i]);
+//		}
 		state-> pc++;
 
 		if (opcode == 0) { // add
@@ -244,6 +267,7 @@ int getCache( statetype* state, cachetype* cache, int addr ) {
 
 	print_action( addr, 1, cache_to_processor );
 
+//	printf("result: %i\n", result); // for testing
 	return result;
 }
 
@@ -297,7 +321,7 @@ int evictBlock( statetype* state, cachetype* cache, int addr, int lruIndex ) {
 		if (cache-> entries[set][lruIndex]-> isDirty) {
 			// write to mem
 			for (int i = 0; i < cache-> blkSize; ++i) {
-				state-> mem[bgnAddr + i] = cache-> entries[set][lruIndex]-> data[i];
+				state-> mem[rmAddr + i] = cache-> entries[set][lruIndex]-> data[i];
 			}
 
 			print_action( rmAddr, cache-> blkSize, cache_to_memory );

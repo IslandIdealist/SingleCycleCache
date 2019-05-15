@@ -21,7 +21,7 @@
 - [ ] MASK ADDRESS ON STOREWORD
 
 ### Tests
-
++ -b 4 -s 3 -a 1
 
 ### Challenges
 + Working wiht 2d arrays
