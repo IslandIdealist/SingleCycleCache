@@ -180,13 +180,6 @@ void runInstrs( statetype* state, cachetype* cache ) {
 		regA       = (curInstr >> 19) & 7;
 		opcode     = (curInstr >> 22) & 7;
 
-//		printf("Opcode: %i\n", opcode); // for testing
-//		for (int i = 0; i < 8; ++i) {
-//			printf("[r%i]: %i\n", i, state-> reg[i]);
-//		}
-//		for (int i = 0; i < 15; ++i) {
-//			printf("[m%i]: %i\n", i, state-> mem[i]);
-//		}
 		state-> pc++;
 
 		if (opcode == 0) { // add
@@ -250,7 +243,6 @@ int getCache( statetype* state, cachetype* cache, int addr ) {
 
 	print_action( addr, 1, cache_to_processor );
 
-//	printf("result: %i\n", result); // for testing
 	return result;
 }
 
