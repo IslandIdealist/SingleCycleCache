@@ -39,14 +39,10 @@ void putCache( statetype* state, cachetype* cache, int addr, int newData );
 void writeBack( statetype* state, cachetype* cache );
 void print_action(int address, int size, enum action_type type);
 
-
 int main( int argc, char** argv ) {
 // GETOPT
 	int        opt;
 	char*      userFile = NULL;
-	double     tempSize = 0;
-	double     tempSets = 0; // used for error checking
-	double     tempWays = 0;
 	cachetype* cache = calloc(1, sizeof(cachetype)); // <frd>
 
 	while ((opt = getopt( argc, argv, "f: b: s: a:" )) != -1) {
@@ -55,13 +51,13 @@ int main( int argc, char** argv ) {
 				userFile = strdup( optarg ); // <frd>
 				break;
 			case 'b':
-				tempSize = atoi( optarg );
+				cache-> blkSize = atoi( optarg );
 				break;
 			case 's':
-				tempSets = atoi( optarg );
+				cache-> numSets = atoi( optarg );
 				break;
 			case 'a':
-				tempWays = atoi( optarg );
+				cache-> numWays = atoi( optarg );
 				break;
 			default:
 				printf( "ERROR: Invalid command arguments\n" );
@@ -79,50 +75,37 @@ int main( int argc, char** argv ) {
 		free( tempStr );
 	}
 
-	if (tempSize <= 0) {
+	if (cache-> blkSize <= 0) {
 		printf("Enter the block size of the cache (in words): ");
-		fscanf(stdin, "%l", tempSize);
+		fscanf(stdin, "%d", &cache-> blkSize);
 	}
 
-	if (tempSets <= 0) {
+	if (cache-> numSets <= 0) {
 		printf("Enter the number of sets in the cache: ");
-		fscanf(stdin, "%l", tempSets);
+		fscanf(stdin, "%d", &cache-> numSets);
 	}
 
-	if (tempWays <= 0) {
+	if (cache-> numWays <= 0) {
 		printf("Enter the associativity of the cache: ");
-		fscanf(stdin, "%l", tempWays);
+		fscanf(stdin, "%d", &cache-> numWays);
 	}
 
-	cache-> numBlks = tempWays * tempSets;
+	cache-> numBlks = cache-> numWays * cache-> numSets;
 
 // CHECK CACHE FOR ERRORS
 	int error = (cache-> blkSize <= 0) ? 1 : 0;
-	    error = (tempSets <= 0) ? 1 : error;
-			error = (tempWays <= 0) ? 1 : error;
-	    error = (tempSize > 256) ? 1 : error;
-			error = (tempWays > tempSize) ? 1 : error;
-	    error = (log2(tempSize) != floor(log2(tempSize))) ? 1 : 0;
-	    error = (log2(tempSets) != floor(log2(tempSets))) ? 1 : 0;
-	    error = (log2(tempWays) != floor(log2(tempWays))) ? 1 : 0;
+	    error = (cache-> numSets <= 0) ? 1 : error;
+			error = (cache-> numWays <= 0) ? 1 : error;
+	    error = (cache-> blkSize > 256) ? 1 : error;
+			error = (cache-> numWays > cache-> numBlks) ? 1 : error;
+	    error = (log2(cache-> blkSize) != floor(log2(cache-> blkSize))) ? 1 : error;
+	    error = (log2(cache-> numSets) != floor(log2(cache-> numSets))) ? 1 : error;
+	    error = (log2(cache-> numWays) != floor(log2(cache-> numWays))) ? 1 : error;
 
 	if (error) {
 		printf("Improper cache settings given\n");
 		exit(EXIT_FAILURE);
 	}
-
-	printf("nSets: %i\n", tempSets);
-	printf("log  : %i\n", log2(tempSets));
-	printf("nlog : %i\n", log(tempSets)/log(2));
-	printf("floor: %i\n", floor(log2(tempSets)));
-	printf("full : %i\n", log2(tempSets) != floor(log2(tempSets)));
-	printf("error: %i\n", error);
-	printf("log 4: %i\n", log2(4));
-	exit(EXIT_FAILURE);
-
-	cache-> blkSize = tempSize;
-	cache-> numSets = tempSets;
-	cache-> numWays = tempWays;
 
 // INITIALIZE CACHE DATA ARRAY
 	cache-> entries = malloc( cache-> numSets * sizeof(entrytype**) ); // <frd>
@@ -357,6 +340,7 @@ void writeBack( statetype* state, cachetype* cache ) {
 					for (int k = 0; k < cache-> blkSize; ++k) {
 						state-> mem[stAddr + k] = cache-> entries[i][j]-> data[k];
 					}
+					print_action( stAddr, cache-> blkSize, cache_to_memory );
 				}
 				cache-> entries[i][j]-> isValid = 0;
 			}
